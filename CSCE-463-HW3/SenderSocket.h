@@ -12,6 +12,7 @@
 #define FAILED_SEND 4 // sendto() failed in kernel
 #define TIMEOUT 5 // timeout after all retx attempts are exhausted
 #define FAILED_RECV 6 // recvfrom() failed in kernel
+#define SOCK_ERROR 7
 
 //Flag header
 #define MAGIC_PROTOCOL 0x8311AA 
@@ -69,10 +70,13 @@ class SenderSocket
 {
 	private: 
 		SOCKET sock;
-		bool connected;
+		double RTO;
+		struct sockaddr_in host;
+		struct sockaddr_in server;
+		bool connected = false;
+		clock_t tlast;
 	public:
 		SenderSocket();
 		~SenderSocket();
-		int Open(string server, int port, int windowSize, LinkProperties lp);
-
+		int Open(string targetHost, int port, int windowSize, LinkProperties lp);
 };

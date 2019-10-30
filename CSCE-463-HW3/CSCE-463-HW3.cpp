@@ -8,7 +8,6 @@
 
 #include "pch.h"
 #include "SenderSocket.h"
-#include "CSCE-463-HW3.h"
 
 int main(int argc, char* argv[])
 {
@@ -27,16 +26,6 @@ int main(int argc, char* argv[])
 	bufferSize = atoi(argv[2]);
 	senderWindow = atoi(argv[3]);
 	linkSpeed = atoi(argv[7]);
-
-	//check if power of 2
-	if (!(bufferSize && (!(bufferSize & (bufferSize - 1)))))
-	{
-		printf("usage: [destination server] [buffer size] [sender window]"
-			"[RTT propagation delay] [forward loss rate] "
-			"[return loss rate] [link speed]\n");
-		return -1;
-	}
-
 	RTT = strtof(argv[4],NULL);
 	fwLossRate = strtof(argv[5], NULL);
 	rtLossRate = strtof(argv[6], NULL);
@@ -55,7 +44,7 @@ int main(int argc, char* argv[])
 	for (UINT64 i = 0; i < dwordBufSize; i++) // required initialization
 		dwordBuf[i] = i;
 	
-	printf("done in %d ms\n", (clock()-tlast)/CLOCKS_PER_SEC);
+	printf("done in %d ms\n", (double)((clock()-tlast)/CLOCKS_PER_SEC));
 
 	//Initialize WinSock; once per program run
 	WSADATA wsaData;
@@ -76,6 +65,15 @@ int main(int argc, char* argv[])
 
 	SenderSocket ss;
 	int status;
+	tlast = clock();
+
 	if ((status = ss.Open(server, MAGIC_PORT, senderWindow, lp)) != STATUS_OK)
-		return 0;
+	{
+		printf("Failed with code: %d\n", status);
+		return -1;
+	}
+
+	//connected successfully
+	printf("Main:\tconnected to %s in %.3f sec, packet size %d\n", server.c_str(), (double)(clock() - tlast) / CLOCKS_PER_SEC, MAX_PKT_SIZE);
+
 }
