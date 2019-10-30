@@ -79,4 +79,5 @@ class SenderSocket
 		SenderSocket();
 		~SenderSocket();
 		int Open(string targetHost, int port, int windowSize, LinkProperties lp);
+		int Close();
 };

@@ -20,7 +20,7 @@ int main(int argc, char* argv[])
 	}
 
 	string server = argv[1]; //destination server
-	int bufferSize, senderWindow, linkSpeed; //buffer size (power of 2) Sender window in packets, link speed
+	int bufferSize, senderWindow, linkSpeed; //buffer size Sender window in packets, link speed
 	float RTT, fwLossRate, rtLossRate; //RTT in seconds, loss rates
 
 	bufferSize = atoi(argv[2]);
@@ -31,7 +31,7 @@ int main(int argc, char* argv[])
 	rtLossRate = strtof(argv[6], NULL);
 
 	//Main information
-	printf("Main:\tsender W = %d, RTT %.3f sec, loss %.0e / %.0e, link %d Mbps\n",
+	printf("Main:\tsender W = %d, RTT %.3f sec, loss %g / %g, link %d Mbps\n",
 		senderWindow, RTT, fwLossRate, rtLossRate, linkSpeed);
 	printf("Main:\tInitializing DWORD array with 2^%d elements... ", bufferSize);
 
@@ -50,7 +50,7 @@ int main(int argc, char* argv[])
 	WSADATA wsaData;
 	WORD wVersionRequested = MAKEWORD(2, 2);
 	if (WSAStartup(wVersionRequested, &wsaData) != 0) {
-		printf("WSAStartup error %d\n", WSAGetLastError());
+		printf("Main:\tWSAStartup error %d\n", WSAGetLastError());
 		WSACleanup();
 		return -1;
 	}
@@ -69,11 +69,38 @@ int main(int argc, char* argv[])
 
 	if ((status = ss.Open(server, MAGIC_PORT, senderWindow, lp)) != STATUS_OK)
 	{
-		printf("Failed with code: %d\n", status);
+		printf("Main:\tconnect failed with code: %d\n", status);
 		return -1;
 	}
 
 	//connected successfully
-	printf("Main:\tconnected to %s in %.3f sec, packet size %d\n", server.c_str(), (double)(clock() - tlast) / CLOCKS_PER_SEC, MAX_PKT_SIZE);
+	printf("Main:\tconnected to %s in %.3f sec, packet size %d\n", server.c_str(),
+		(double)(clock() - tlast) / CLOCKS_PER_SEC, MAX_PKT_SIZE);
 
+	//to implement in next part
+	/*
+	char* charBuf = (char*)dwordBuf; // this buffer goes into socket
+	UINT64 byteBufferSize = dwordBufSize << 2; // convert to bytes
+	UINT64 off = 0; // current position in buffer
+
+	while (off < byteBufferSize)
+	{
+		// decide the size of next chunk
+		int bytes = min(byteBufferSize - off, MAX_PKT_SIZE - sizeof(SenderDataHeader));
+		// send chunk into socket
+		off += bytes;
+	}*/
+
+	tlast = clock();
+	//close connection
+	int closestatus;
+	if ((closestatus = ss.Close()) != STATUS_OK)
+	{
+		printf("Main:\tclose failed with code:%d\n", closestatus);
+		return -1;
+	}
+	printf("Main:\ttransfer finished in %.3f sec\n", 
+		(double)(clock() - tlast) / CLOCKS_PER_SEC);
+
+	return 0;
 }
