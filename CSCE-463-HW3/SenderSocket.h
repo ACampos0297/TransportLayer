@@ -74,9 +74,10 @@ class SenderSocket
 		struct sockaddr_in host;
 		struct sockaddr_in server;
 		bool connected = false;
-		int seq_num;
+		int timedoutPackets;
 		clock_t tlast;
 	public:
+		int seq_num;
 		SenderSocket();
 		int Open(string targetHost, int port, int windowSize, LinkProperties lp);
 		int Close();

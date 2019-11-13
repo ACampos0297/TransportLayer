@@ -7,6 +7,7 @@ SenderSocket::SenderSocket()
 	RTO = 1;
 	tlast = clock();
 	seq_num = 0;
+	timedoutPackets = 0;
 }
 
 int SenderSocket::Open(string targetHost, int port, int windowSize, LinkProperties linkProperties)
@@ -207,8 +208,65 @@ int SenderSocket::Send(char* buf, int bytes)
 
 	//start the buffer that will include the bytes + the size of the header
 	char* sendBuf = new char[bytes + sizeof(SenderDataHeader)];
-	sendBuf = buf;
+	
+	memcpy(sendBuf, &sendHeader, sizeof(SenderDataHeader));
+	memcpy(sendBuf + sizeof(SenderDataHeader), buf, bytes);
 	
 	int attempts = 0;
 
+	while (attempts < MAX_ATTEMPTS)
+	{
+		printf("Seqnum %d\n", seq_num);
+		//send 
+		if (sendto(sock, (char*)& sendBuf, bytes+ sizeof(SenderDataHeader), 0,
+			(struct sockaddr*) & server, sizeof(server)) == SOCKET_ERROR)
+		{
+			return FAILED_SEND;
+		}
+
+		//packet timed out so increase the count of timed out packets
+		if (attempts > 1)
+			timedoutPackets++;
+
+		//define retransmission timeout
+		struct timeval tv;
+		tv.tv_sec = (DWORD)RTO;
+		tv.tv_usec = (DWORD)((RTO * (double)1000000) - (tv.tv_sec * (double)1000000));
+
+		fd_set fdset;
+		FD_ZERO(&fdset);
+		FD_SET(sock, &fdset);
+
+		//from HW 1
+		if (select(0, &fdset, NULL, NULL, &tv) > 0)
+		{
+			int ansLen = sizeof(server);
+			
+			char* answer = new char[sizeof(ReceiverHeader)];
+
+			int bytes = recvfrom(sock, (char*) answer, sizeof(ReceiverHeader), 0,
+				(struct sockaddr*) & server, &ansLen);
+			
+			if (bytes <0)
+			{
+				//failed receive
+				return FAILED_RECV;
+			}
+			
+			ReceiverHeader* answerHeader = (ReceiverHeader*)answer;
+			if (answerHeader->ackSequence != seq_num + 1)
+			{
+				attempts--;
+				continue;
+			}
+
+			seq_num++;
+
+
+
+			return STATUS_OK;
+		}
+		attempts++;
+	}
+	return TIMEOUT;
 }

@@ -15,6 +15,7 @@ public:
 	HANDLE	mutex;
 	SenderSocket* sock;
 	clock_t init;
+	UINT64* off;
 };
 
 UINT statsThread(LPVOID pParam)
@@ -24,8 +25,10 @@ UINT statsThread(LPVOID pParam)
 	while (WaitForSingleObject(p->eventQuit, 2000) == WAIT_TIMEOUT)
 	{
 		WaitForSingleObject(p->mutex, INFINITE);					// lock mutex
-		//printf("[%3.0f] B %5d ( %.1f MB ) N %5d T %2d F 0 W 1 S %0.3f Mbps RTT %.3f\n");
-		printf("[% 3.0f]\n", floor((clock() - p->init) / CLOCKS_PER_SEC));
+		printf("[%3.0f] B %5d ( %.1f MB ) N %5d T %2d F 0 W 1 S %0.3f Mbps RTT %.3f\n", 
+			floor((clock() - p->init) / CLOCKS_PER_SEC), p->sock->seq_num, 0,0,0,0,0
+			);
+		
 
 		ReleaseMutex(p->mutex);										// unlock mutex
 	}
@@ -121,7 +124,7 @@ int main(int argc, char* argv[])
 	char* charBuf = (char*)dwordBuf; // this buffer goes into socket
 	UINT64 byteBufferSize = dwordBufSize << 2; // convert to bytes
 	UINT64 off = 0; // current position in buffer
-
+	p.off = &off;
 	HANDLE statThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)statsThread, &p, 0, NULL);
 	
 	//start transfer clock for main
@@ -132,13 +135,18 @@ int main(int argc, char* argv[])
 	{
 		// decide the size of next chunk
 		int bytes = min(byteBufferSize - off, MAX_PKT_SIZE - sizeof(SenderDataHeader));
-		//Next chunk cannot be less than 0
-		if (bytes <= 0)
-		{
-			break;
-		}
+		
 		// send chunk into socket
-		status = 
+		status = ss.Send(charBuf + off, bytes);
+
+		if (status != STATUS_OK)
+		{
+			printf("Main:\tsend failed with status %d\n", status);
+			SetEvent(p.eventQuit);
+			WaitForSingleObject(statThread, INFINITE);
+			CloseHandle(statThread);
+			WSACleanup();
+		}
 
 		off += bytes;
 	}
@@ -162,6 +170,9 @@ int main(int argc, char* argv[])
 	SetEvent(p.eventQuit);
 	WaitForSingleObject(statThread, INFINITE);
 	CloseHandle(statThread);
+
+	WSACleanup();
+
 
 	return 0;
 }
