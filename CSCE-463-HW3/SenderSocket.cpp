@@ -6,10 +6,8 @@ SenderSocket::SenderSocket()
 	sock = socket(AF_INET, SOCK_DGRAM, 0);
 	RTO = 1;
 	tlast = clock();
-}
-
-SenderSocket::~SenderSocket()
-{
+	seq_num = 0;
+	timedoutPackets = 0;
 }
 
 int SenderSocket::Open(string targetHost, int port, int windowSize, LinkProperties linkProperties)
@@ -54,8 +52,8 @@ int SenderSocket::Open(string targetHost, int port, int windowSize, LinkProperti
 	{
 		if ((remote = gethostbyname(targetHost.c_str())) == NULL) //not valid Ip do dns lookup
 		{
-			printf("[%0.3f] --> target %s is invalid\n", 
-				(clock() - tlast) / CLOCKS_PER_SEC, targetHost);
+			/*printf("[%0.3f] --> target %s is invalid\n", 
+				(clock() - tlast) / CLOCKS_PER_SEC, targetHost);*/
 			return INVALID_NAME;
 		}
 		else //we have found IP
@@ -84,16 +82,16 @@ int SenderSocket::Open(string targetHost, int port, int windowSize, LinkProperti
 	tlast = clock();
 	while (attemptCount < MAX_SYN_ATTEMPTS)
 	{
-		printf("[ %.3f] --> SYN %d (attempt %d of %d, RTO %.3f) to %s\n", 
+		/*printf("[ %.3f] --> SYN %d (attempt %d of %d, RTO %.3f) to %s\n", 
 			(double)(clock() - tlast) / CLOCKS_PER_SEC, synHeader.senderDataHeader.sequence,
-			attemptCount + 1, MAX_SYN_ATTEMPTS, RTO, inet_ntoa(server.sin_addr));
+			attemptCount + 1, MAX_SYN_ATTEMPTS, RTO, inet_ntoa(server.sin_addr));*/
 
 		//send 
 		if (sendto(sock, (char*)& synHeader, sizeof(synHeader), 0, 
 			(struct sockaddr*) & server, sizeof(server)) == SOCKET_ERROR)
 		{
-			printf("[ %.3f] --> failed sendto with : %d\n", 
-				(double)(clock() - tlast) / CLOCKS_PER_SEC, WSAGetLastError());
+			/*printf("[ %.3f] --> failed sendto with : %d\n", 
+				(double)(clock() - tlast) / CLOCKS_PER_SEC, WSAGetLastError());*/
 			return FAILED_SEND;
 		}
 
@@ -108,17 +106,17 @@ int SenderSocket::Open(string targetHost, int port, int windowSize, LinkProperti
 				(struct sockaddr*)&server, &ansLen);
 			if (bytes < 0)
 			{
-				printf("[ %.3f] <-- failed recvfrom() with: %d\n", 
-					(double)(clock() - tlast) / CLOCKS_PER_SEC, WSAGetLastError());
+				/*printf("[ %.3f] <-- failed recvfrom() with: %d\n", 
+					(double)(clock() - tlast) / CLOCKS_PER_SEC, WSAGetLastError());*/
 				return FAILED_RECV;
 			}
 			connected = true;
 			//change RTO to RTT
 			RTO = ((double)(clock() - tlast)) / CLOCKS_PER_SEC;
 			RTO = RTO * 3;//RTO has to be 3 RTT due to host -> server -> host
-			printf("[ %.3f] <-- SYN-ACK %d window %d, setting initial RTO to %.3f\n",
+			/*printf("[ %.3f] <-- SYN-ACK %d window %d, setting initial RTO to %.3f\n",
 				((double)(clock() - tlast)) / CLOCKS_PER_SEC, receiveHeader.ackSequence, 
-				receiveHeader.recieverWindow, RTO);
+				receiveHeader.recieverWindow, RTO);*/
 			return STATUS_OK;
 		}
 		//end of HW 1 fragment
@@ -151,16 +149,16 @@ int SenderSocket::Close()
 	while (attemptCount < MAX_ATTEMPTS)
 	{
 		tlast = clock();
-		printf("[ %.3f] --> SYN %d (attempt %d of %d, RTO %.3f)\n",
+		/*printf("[ %.3f] --> SYN %d (attempt %d of %d, RTO %.3f)\n",
 			(double)(clock() - tlast) / CLOCKS_PER_SEC, finHeader.sequence,
-			attemptCount + 1, MAX_ATTEMPTS, RTO);
+			attemptCount + 1, MAX_ATTEMPTS, RTO);*/
 
 		//send 
 		if (sendto(sock, (char*)& finHeader, sizeof(finHeader), 0,
 			(struct sockaddr*) & server, sizeof(server)) == SOCKET_ERROR)
 		{
-			printf("[ %.3f] --> failed sendto with : %d\n",
-				(double)(clock() - tlast) / CLOCKS_PER_SEC, WSAGetLastError());
+			/*printf("[ %.3f] --> failed sendto with : %d\n",
+				(double)(clock() - tlast) / CLOCKS_PER_SEC, WSAGetLastError());*/
 			return FAILED_SEND;
 		}
 
@@ -175,20 +173,20 @@ int SenderSocket::Close()
 				(struct sockaddr*) & server, &ansLen);
 			if (bytes < 0)
 			{
-				printf("[ %.3f] <-- failed recvfrom() with: %d\n",
-					(double)(clock() - tlast) / CLOCKS_PER_SEC, WSAGetLastError());
+				/*printf("[ %.3f] <-- failed recvfrom() with: %d\n",
+					(double)(clock() - tlast) / CLOCKS_PER_SEC, WSAGetLastError());*/
 				return FAILED_RECV;
 			}
-			printf("[ %.3f] <-- FIN-ACK %d window %d\n",
+			/*printf("[ %.3f] <-- FIN-ACK %d window %d\n",
 				((double)(clock() - tlast)) / CLOCKS_PER_SEC, receiveHeader.ackSequence,
-				receiveHeader.recieverWindow);
+				receiveHeader.recieverWindow);*/
 			
 			connected = false;
 
 			if (closesocket(sock) == SOCKET_ERROR)
 			{
-				printf("[ %.3f] <-- failed closesocket() with: %d\n",
-					(double)(clock() - tlast) / CLOCKS_PER_SEC, WSAGetLastError());
+				/*printf("[ %.3f] <-- failed closesocket() with: %d\n",
+					(double)(clock() - tlast) / CLOCKS_PER_SEC, WSAGetLastError());*/
 				return SOCK_ERROR;
 			}
 			return STATUS_OK;
@@ -199,3 +197,76 @@ int SenderSocket::Close()
 	return TIMEOUT;
 }
 
+int SenderSocket::Send(char* buf, int bytes)
+{
+	if (!connected)
+		return NOT_CONNECTED;
+
+	//buiild header
+	SenderDataHeader sendHeader;
+	sendHeader.sequence = seq_num;
+
+	//start the buffer that will include the bytes + the size of the header
+	char* sendBuf = new char[bytes + sizeof(SenderDataHeader)];
+	
+	memcpy(sendBuf, &sendHeader, sizeof(SenderDataHeader));
+	memcpy(sendBuf + sizeof(SenderDataHeader), buf, bytes);
+	
+	int attempts = 0;
+
+	while (attempts < MAX_ATTEMPTS)
+	{
+		printf("Seqnum %d\n", seq_num);
+		//send 
+		if (sendto(sock, (char*)& sendBuf, bytes+ sizeof(SenderDataHeader), 0,
+			(struct sockaddr*) & server, sizeof(server)) == SOCKET_ERROR)
+		{
+			return FAILED_SEND;
+		}
+
+		//packet timed out so increase the count of timed out packets
+		if (attempts > 1)
+			timedoutPackets++;
+
+		//define retransmission timeout
+		struct timeval tv;
+		tv.tv_sec = (DWORD)RTO;
+		tv.tv_usec = (DWORD)((RTO * (double)1000000) - (tv.tv_sec * (double)1000000));
+
+		fd_set fdset;
+		FD_ZERO(&fdset);
+		FD_SET(sock, &fdset);
+
+		//from HW 1
+		if (select(0, &fdset, NULL, NULL, &tv) > 0)
+		{
+			int ansLen = sizeof(server);
+			
+			char* answer = new char[sizeof(ReceiverHeader)];
+
+			int bytes = recvfrom(sock, (char*) answer, sizeof(ReceiverHeader), 0,
+				(struct sockaddr*) & server, &ansLen);
+			
+			if (bytes <0)
+			{
+				//failed receive
+				return FAILED_RECV;
+			}
+			
+			ReceiverHeader* answerHeader = (ReceiverHeader*)answer;
+			if (answerHeader->ackSequence != seq_num + 1)
+			{
+				attempts--;
+				continue;
+			}
+
+			seq_num++;
+
+
+
+			return STATUS_OK;
+		}
+		attempts++;
+	}
+	return TIMEOUT;
+}

@@ -9,6 +9,36 @@
 #include "pch.h"
 #include "SenderSocket.h"
 
+class Parameters {
+public: 
+	HANDLE eventQuit;
+	HANDLE	mutex;
+	SenderSocket* sock;
+	clock_t init;
+	UINT64* off;
+};
+
+UINT statsThread(LPVOID pParam)
+{
+	Parameters* p = ((Parameters*)pParam);
+
+	while (WaitForSingleObject(p->eventQuit, 2000) == WAIT_TIMEOUT)
+	{
+		WaitForSingleObject(p->mutex, INFINITE);					// lock mutex
+		printf("[%3.0f] B %5d ( %.1f MB ) N %5d T %2d F 0 W 1 S %0.3f Mbps RTT %.3f\n", 
+			floor((clock() - p->init) / CLOCKS_PER_SEC), p->sock->seq_num, 0,0,0,0,0
+			);
+		
+
+		ReleaseMutex(p->mutex);										// unlock mutex
+	}
+	printf("[% 3.0f]\n", floor((clock() - p->init) / CLOCKS_PER_SEC));
+
+	//last print goes here
+
+	return 0;
+}
+
 int main(int argc, char* argv[])
 {
 	if (argc < 8) //wrong command line arguments
@@ -77,21 +107,53 @@ int main(int argc, char* argv[])
 	printf("Main:\tconnected to %s in %.3f sec, packet size %d\n", server.c_str(),
 		(double)(clock() - tlast) / CLOCKS_PER_SEC, MAX_PKT_SIZE);
 
+	//start stats thread
+	//Prepared shared parameters based on sample code 
+	Parameters p;
+	// create a quit event for stat thread
+	p.eventQuit = CreateEvent(NULL, true, false, NULL);
+	// create a mutex for accessing critical sections (including printf); initial state = not locked
+	p.mutex = CreateMutex(NULL, 0, NULL);
+	//start thread clock
+	p.init = clock();
+	//send socket to shared params
+	p.sock = &ss;
+
 	//to implement in next part
-	/*
+	
 	char* charBuf = (char*)dwordBuf; // this buffer goes into socket
 	UINT64 byteBufferSize = dwordBufSize << 2; // convert to bytes
 	UINT64 off = 0; // current position in buffer
+	p.off = &off;
+	HANDLE statThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)statsThread, &p, 0, NULL);
+	
+	//start transfer clock for main
+	tlast = clock();
 
+	
 	while (off < byteBufferSize)
 	{
 		// decide the size of next chunk
 		int bytes = min(byteBufferSize - off, MAX_PKT_SIZE - sizeof(SenderDataHeader));
+		
 		// send chunk into socket
-		off += bytes;
-	}*/
+		status = ss.Send(charBuf + off, bytes);
 
-	tlast = clock();
+		if (status != STATUS_OK)
+		{
+			printf("Main:\tsend failed with status %d\n", status);
+			SetEvent(p.eventQuit);
+			WaitForSingleObject(statThread, INFINITE);
+			CloseHandle(statThread);
+			WSACleanup();
+		}
+
+		off += bytes;
+	}
+
+	
+
+
 	//close connection
 	int closestatus;
 	if ((closestatus = ss.Close()) != STATUS_OK)
@@ -101,6 +163,16 @@ int main(int argc, char* argv[])
 	}
 	printf("Main:\ttransfer finished in %.3f sec\n", 
 		(double)(clock() - tlast) / CLOCKS_PER_SEC);
+
+	
+
+	//exit stats thread
+	SetEvent(p.eventQuit);
+	WaitForSingleObject(statThread, INFINITE);
+	CloseHandle(statThread);
+
+	WSACleanup();
+
 
 	return 0;
 }
